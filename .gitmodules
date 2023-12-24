@@ -1,0 +1,3 @@
+[submodule "EEG-Conformer"]
+	path = EEG-Conformer
+	url = git@github.com:eeyhsong/EEG-Conformer.git
