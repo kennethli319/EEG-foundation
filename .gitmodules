@@ -1,3 +1,12 @@
 [submodule "EEG-Conformer"]
 	path = EEG-Conformer
 	url = git@github.com:eeyhsong/EEG-Conformer.git
+[submodule "PyTorch-VAE"]
+	path = PyTorch-VAE
+	url = git@github.com:AntixK/PyTorch-VAE.git
+[submodule "nanoGPT"]
+	path = nanoGPT
+	url = git@github.com:karpathy/nanoGPT.git
+[submodule "brainmagick"]
+	path = brainmagick
+	url = git@github.com:facebookresearch/brainmagick.git
