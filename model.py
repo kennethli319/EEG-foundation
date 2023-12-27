@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from braindecode.models import EEGConformer
 import random
+import numpy as np
 from transformers import GPT2Tokenizer, GPT2LMHeadModel
 # from torchaudio.models import Conformer
 
@@ -55,11 +56,14 @@ class EDFDataset(Dataset):
 
     def __getitem__(self, idx):
         data = load_pt_file(self.files[idx])
-        return torch.tensor(data, dtype=torch.float32)
+        data = torch.as_tensor(data, dtype=torch.float32)
+        data = sample_to_chunks(data)
+        data = torch.as_tensor(data, dtype=torch.float32)
+        return data
 
 class EDFDataLoader(DataLoader):
-    def __init__(self, dataset, batch_size, shuffle=True, collate_fn=None):
-        super(EDFDataLoader, self).__init__(dataset, batch_size, shuffle, collate_fn)
+    def __init__(self, dataset, batch_size, shuffle=True, collate_fn=None, *args, **kwargs):
+        super(EDFDataLoader, self).__init__(dataset, batch_size, shuffle, collate_fn, *args, **kwargs)
 
 def preprocess_data(base_dir, output_dir):
     """
@@ -76,9 +80,17 @@ def preprocess_data(base_dir, output_dir):
         if sample_rate != 250:
             print(f"Resampling... {sample_rate}  ->  250")
             raw_data = resample(raw_data, sample_rate=250)
-        # save the preprocessed data as pickle file
-        print(f"Saving {fname}.pt")
-        torch.save(raw_data, f"{output_dir}/{fname}.pt")
+            print(raw_data.shape)
+
+        # segment the data into 120 second chunks
+        chunk_size = 120 * 250
+        chunks = torch.split(torch.as_tensor(raw_data), chunk_size, dim=1)
+        print(len(chunks))
+    
+        for i, data in enumerate(chunks[:-1]):
+            # save the preprocessed data as pickle file
+            print(f"Saving {output_dir}/{fname}_{i}.pt")
+            torch.save(data, f"{output_dir}/{fname}_{i}.pt")
 
 def batch_padding(batch):
     """
@@ -166,7 +178,7 @@ def main():
 
     # Directories
     base_dir = "/media/kenneth/gujiga/eeg_tuf/edf/train/aaaaatvr"
-    output_dir = "./preprocessed_data/"
+    output_dir = "./train_segmented/"
     test_dir = "./test_data/"
 
     # Create model output directory if it doesn't exist
@@ -185,7 +197,11 @@ def main():
 
     # Step 1: load the data
     dataset = EDFDataset(output_dir)
+    # Dataloader
+    dataloader = EDFDataLoader(dataset, batch_size=1, shuffle=True, num_workers=10)
+
     test_dataset = EDFDataset(test_dir)
+    test_dataloader = EDFDataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=10)
 
     
     eeg_model = EEGConformer(
@@ -212,11 +228,9 @@ def main():
         print(f"Epoch {n_epochs}")
 
         model.train()
-        for sample in dataset:
+        for sample in tqdm(dataloader):
             print("loading data...")
-            train_sample = sample_to_chunks(sample)
-            train_sample = torch.tensor(train_sample, dtype=torch.float32)
-            train_sample = train_sample.cuda()
+            train_sample = sample[0].cuda()
             # Step 2: zero the gradients
             optimizer.zero_grad()
             # Step 3: run the model
@@ -233,10 +247,8 @@ def main():
         # Step 7: test the model
         model.eval()
         with torch.inference_mode():
-            for sample in test_dataset:
-                test_sample = sample_to_chunks(sample)
-                test_sample = torch.tensor(test_sample, dtype=torch.float32)
-                test_sample = test_sample.cuda()
+            for sample in test_dataloader:
+                test_sample = sample[0].cuda()
                 out = model(test_sample)
                 print(f"Test loss: {out.loss}")
 
