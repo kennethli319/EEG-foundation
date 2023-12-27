@@ -106,7 +106,7 @@ def sample_to_chunks(sample, chunk_length=2, overlap=0.2, padding_value=0):
     overlap = int (0.2 * sampling_rate)
 
     # Randomly select starting points for each EEG recording
-    starting_point = random_starting_point(sample.shape[1])
+    starting_point = random_starting_point(sample.shape[1] - (input_chunks * chunk_length) - (input_chunks * overlap))
     starting_points = get_starting_points(starting_point, input_chunks, chunk_length, overlap)
     # Sample chunks from the EEG recording
     sampled_chunks = sample_chunks(sample, starting_points, input_chunks, chunk_length, overlap)
@@ -164,9 +164,16 @@ class EEGGPT(torch.nn.Sequential):
 
 def main():
 
+    # Directories
     base_dir = "/media/kenneth/gujiga/eeg_tuf/edf/train/aaaaatvr"
     output_dir = "./preprocessed_data/"
+    test_dir = "./test_data/"
 
+    # Create model output directory if it doesn't exist
+    model_dir = "./models/"
+    os.makedirs(model_dir, exist_ok=True)
+
+    # Config
     preprocess = False
 
     # Step 0: preprocess the data (optional)
@@ -178,7 +185,9 @@ def main():
 
     # Step 1: load the data
     dataset = EDFDataset(output_dir)
+    test_dataset = EDFDataset(test_dir)
 
+    
     eeg_model = EEGConformer(
             n_outputs=1024, 
             n_chans=8,
@@ -202,43 +211,34 @@ def main():
     for n_epochs in range(10):
         print(f"Epoch {n_epochs}")
 
+        model.train()
         for sample in dataset:
             print("loading data...")
             train_sample = sample_to_chunks(sample)
-            # train_sample = train_sample.transpose(1, 2)
-            # print(train_sample.shape)
             train_sample = torch.tensor(train_sample, dtype=torch.float32)
             train_sample = train_sample.cuda()
-
-            # Step 2: create the model
-            
-            # Step 3: train the model
-            model.train()
-
-            # lengths = torch.tensor([500]*32)
-
-            out = model(train_sample)
-            # torch.nn.Softmax(dim=1)(out)
-            # seq = torch.argmax(out, dim=1)
-
-            # out_gpt = gpt_model(seq, labels=seq)
-        
-            # seq_gpt = torch.argmax(out_gpt, dim=1)
-        
+            # Step 2: zero the gradients
             optimizer.zero_grad()
+            # Step 3: run the model
+            out = model(train_sample)
+            # Step 4: backpropagate the loss
             out.loss.backward()
             optimizer.step()
+            # Step 5: print the loss
+            print(f"Train loss: {out.loss}")
 
-            print(out.loss)
-        
-        
+        # Step 6: save the model
+        torch.save(model.state_dict(), f"models/model_{n_epochs}.pt")
 
-        
-        
-
-
-
-
+        # Step 7: test the model
+        model.eval()
+        with torch.inference_mode():
+            for sample in test_dataset:
+                test_sample = sample_to_chunks(sample)
+                test_sample = torch.tensor(test_sample, dtype=torch.float32)
+                test_sample = test_sample.cuda()
+                out = model(test_sample)
+                print(f"Test loss: {out.loss}")
 
 if __name__ == "__main__":
     main()
