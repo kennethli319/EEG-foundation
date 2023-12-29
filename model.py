@@ -85,7 +85,6 @@ def preprocess_data(base_dir, output_dir):
         # segment the data into 120 second chunks
         chunk_size = 120 * 250
         chunks = torch.split(torch.as_tensor(raw_data), chunk_size, dim=1)
-        print(len(chunks))
     
         for i, data in enumerate(chunks[:-1]):
             # save the preprocessed data as pickle file
@@ -198,7 +197,7 @@ def main():
     # Step 1: load the data
     dataset = EDFDataset(output_dir)
     # Dataloader
-    dataloader = EDFDataLoader(dataset, batch_size=1, shuffle=True, num_workers=10)
+    dataloader = EDFDataLoader(dataset, batch_size=8, shuffle=True, num_workers=10)
 
     test_dataset = EDFDataset(test_dir)
     test_dataloader = EDFDataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=10)
@@ -229,28 +228,29 @@ def main():
 
         model.train()
         for sample in tqdm(dataloader):
-            print("loading data...")
-            train_sample = sample[0].cuda()
-            # Step 2: zero the gradients
-            optimizer.zero_grad()
-            # Step 3: run the model
-            out = model(train_sample)
-            # Step 4: backpropagate the loss
-            out.loss.backward()
-            optimizer.step()
-            # Step 5: print the loss
-            print(f"Train loss: {out.loss}")
+            for s in sample:
+                train_sample = s.cuda()
+                # Step 2: zero the gradients
+                optimizer.zero_grad()
+                # Step 3: run the model
+                out = model(train_sample)
+                # Step 4: backpropagate the loss
+                out.loss.backward()
+                optimizer.step()
+                # Step 5: print the loss
+                print(f"Train loss: {out.loss}")
 
-        # Step 6: save the model
-        torch.save(model.state_dict(), f"models/model_{n_epochs}.pt")
+        if n_epochs % 5 == 0:
+            # Step 6: save the model
+            torch.save(model.state_dict(), f"models/model_{n_epochs}.pt")
 
         # Step 7: test the model
-        model.eval()
-        with torch.inference_mode():
-            for sample in test_dataloader:
-                test_sample = sample[0].cuda()
-                out = model(test_sample)
-                print(f"Test loss: {out.loss}")
+        # model.eval()
+        # with torch.inference_mode():
+        #     for sample in test_dataloader:
+        #         test_sample = sample[0].cuda()
+        #         out = model(test_sample)
+        #         print(f"Test loss: {out.loss}")
 
 if __name__ == "__main__":
     main()
