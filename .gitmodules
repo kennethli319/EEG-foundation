@@ -10,3 +10,6 @@
 [submodule "brainmagick"]
 	path = brainmagick
 	url = git@github.com:facebookresearch/brainmagick.git
+[submodule "BIOT"]
+	path = BIOT
+	url = git@github.com:ycq091044/BIOT.git
